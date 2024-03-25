@@ -34,6 +34,10 @@
 
 #include "utility.h"
 
+#define N 1024
+#define RADIUS 3
+#define BLOCK_SIZE 16
+
 class FeatureAssociation{
 
 private:
@@ -1902,24 +1906,24 @@ public:
 
 
 
-// int main(int argc, char** argv)
-// {
-//     ros::init(argc, argv, "lego_loam");
+int main(int argc, char** argv)
+{
+    ros::init(argc, argv, "lego_loam");
 
-//     ROS_INFO("\033[1;32m---->\033[0m Feature Association Started.");
+    ROS_INFO("\033[1;32m---->\033[0m Feature Association Started.");
 
-//     FeatureAssociation FA;
+    FeatureAssociation FA;
 
-//     ros::Rate rate(200);
-//     while (ros::ok())
-//     {
-//         ros::spinOnce();
+    ros::Rate rate(200);
+    while (ros::ok())
+    {
+        ros::spinOnce();
 
-//         FA.runFeatureAssociation();
+        FA.runFeatureAssociation();
 
-//         rate.sleep();
-//     }
+        rate.sleep();
+    }
     
-//     ros::spin();
-//     return 0;
-// }
+    ros::spin();
+    return 0;
+}
