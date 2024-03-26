@@ -256,7 +256,7 @@ public:
         }
     }
 
-
+    /*TODO: Move this segmentation to CUDA*/
     void groundRemoval(){
         size_t lowerInd, upperInd;
         float diffX, diffY, diffZ, angle;
@@ -309,6 +309,7 @@ public:
         }
     }
 
+    /*TODO: Move this segmentation to CUDA*/
     void cloudSegmentation(){
         // segmentation process
         for (size_t i = 0; i < N_SCAN; ++i)
@@ -355,6 +356,7 @@ public:
         }
         
         // extract segmented cloud for visualization
+        // TODO: Push this code to 
         if (pubSegmentedCloudPure.getNumSubscribers() != 0){
             for (size_t i = 0; i < N_SCAN; ++i){
                 for (size_t j = 0; j < Horizon_SCAN; ++j){

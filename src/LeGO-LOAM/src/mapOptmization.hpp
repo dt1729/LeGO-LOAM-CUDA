@@ -574,6 +574,8 @@ public:
         return cloudOut;
     }
 
+
+    // TODO: Cuda accelarate this using cuPCL
     pcl::PointCloud<PointType>::Ptr transformPointCloud(pcl::PointCloud<PointType>::Ptr cloudIn, PointTypePose* transformIn){
 
         pcl::PointCloud<PointType>::Ptr cloudOut(new pcl::PointCloud<PointType>());
@@ -871,7 +873,7 @@ public:
         return true;
     }
 
-
+    // TODO: Update using cuPCL
     void performLoopClosure(){
 
         if (cloudKeyPoses3D->points.empty() == true)
@@ -1089,7 +1091,7 @@ public:
         downSizeFilterSurf.filter(*laserCloudSurfTotalLastDS);
         laserCloudSurfTotalLastDSNum = laserCloudSurfTotalLastDS->points.size();
     }
-
+    // TODO: CUDA Optimize
     void cornerOptimization(int iterCount){
 
         updatePointAssociateToMapSinCos();
