@@ -256,6 +256,46 @@ public:
         }
     }
 
+    __global__ void groundRemoval(float *input_x, float *input_y, float *input_z, float *output_x, float *output_y, float *output_z){
+        size_t lowerInd, upperInd;
+        float diffX, diffY, diffZ, angle;
+        // groundMat
+        // -1, no valid info to check if ground of not
+        //  0, initial value, after validation, means not ground
+        //  1, ground
+        // These are written under the assumption that the data transferred to CUDA is 
+        lowerInd = threadIdx.x * blockDim.x + blockIdx.x;
+        upperInd = (threadIdx.x + 1)* blockDim.x  + blockIdx.x;
+
+        if(intensity[lowerInd] == -1 || intensity[upperInd] == -1){
+            groundMat[threadIdx.x + blockIdx.x * blockDim.x] = -1;
+            return;
+        }
+
+        diffX = fullCloudX[upperInd] - fullCloudX[lowerInd];
+        diffY = fullCloudY[upperInd] - fullCloudY[lowerInd];
+        diffZ = fullCloudZ[upperInd] - fullCloudZ[lowerInd];
+        
+        angle = atan2(diffZ, sqrt(diffX*diffX + diffY*diffY) ) * 180 / M_PI;
+
+        if (abs(angle - sensorMountAngle) <= 10){
+            groundMat[threadIdx.x + blockIdx.x * blockDim.x] = 1;
+            groundMat[(threadIdx.x + 1) blockIdx.x * blockDim.x] = 1;
+        }
+    }
+
+    void groundRemovalCUDAcall(){
+        // Assign memory for host device
+
+        // Assign memory for remote device
+
+        // Call the groundRemovalCuda function with <<<blocksPerGrid, threadsPerBlock>>>
+
+        // Memcopy back to host cudaMemcpy
+        
+        // Free cuda memory cudaFree
+    }
+
     /*TODO: Move this segmentation to CUDA*/
     void groundRemoval(){
         size_t lowerInd, upperInd;
@@ -308,6 +348,12 @@ public:
             }
         }
     }
+
+
+    // __global__ void cloudSegmentationCUDA(){
+
+    // }
+
 
     /*TODO: Move this segmentation to CUDA*/
     void cloudSegmentation(){
