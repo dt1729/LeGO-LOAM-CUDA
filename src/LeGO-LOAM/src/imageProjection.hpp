@@ -256,7 +256,7 @@ public:
         }
     }
 
-    __global__ void groundRemoval(float *input_x, float *input_y, float *input_z, float *output_x, float *output_y, float *output_z){
+    __global__ void groundRemoval(float *fullCloudX, float *fullCloudY, float *fullCloudZ, float *groundMat){
         size_t lowerInd, upperInd;
         float diffX, diffY, diffZ, angle;
         // groundMat
@@ -286,14 +286,34 @@ public:
 
     void groundRemovalCUDAcall(){
         // Assign memory for host device
+        float* fullCloudX, fullCloudY, fullCloudZ, groundMat;
 
         // Assign memory for remote device
+        cudaMalloc(&fullCloudX, fullCloud->points.size()*sizeof(float));
+        cudaMalloc(&fullCloudY, fullCloud->points.size()*sizeof(float));
+        cudaMalloc(&fullCloudZ, fullCloud->points.size()*sizeof(float));
+
+        cudaMalloc(&groundMat, Horizon_SCAN*groundScanInd*sizeof(float));
+
+        // Copy from host to device
+        // TODO: Figure out it's syntax
+        cudaMemcpy(&fullCloudX, )
 
         // Call the groundRemovalCuda function with <<<blocksPerGrid, threadsPerBlock>>>
+        int threadsPerBlock = groundScanInd;
+        int blocksPerGrid   = (Horizon_SCAN*groundScanInd);
+        groundRemovalCUDA<<<blocksPerGrid, threadsPerBlock>>>(fullCloudX, fullCloudY, fullCloudZ, groundMat);
 
         // Memcopy back to host cudaMemcpy
+        cudaMemcpy()
         
+        // Save all the memory to pcl clouds.
+
         // Free cuda memory cudaFree
+        cudaFree(fullCloudX);
+        cudaFree(fullCloudY);
+        cudaFree(fullCloudZ);
+        cudaFree(groundMat);
     }
 
     /*TODO: Move this segmentation to CUDA*/
