@@ -285,29 +285,56 @@ public:
     }
 
     void groundRemovalCUDAcall(){
+        // TODO: At the time of creation of clouds from ROSMsg, create flat arrays as well
+
         // Assign memory for host device
-        float* fullCloudX, fullCloudY, fullCloudZ, groundMat;
+        float* fullCloudX, fullCloudY, fullCloudZ, groundMatCUDA;
 
         // Assign memory for remote device
         cudaMalloc(&fullCloudX, fullCloud->points.size()*sizeof(float));
         cudaMalloc(&fullCloudY, fullCloud->points.size()*sizeof(float));
         cudaMalloc(&fullCloudZ, fullCloud->points.size()*sizeof(float));
 
-        cudaMalloc(&groundMat, Horizon_SCAN*groundScanInd*sizeof(float));
+        cudaMalloc(&groundMatCUDA, Horizon_SCAN*groundScanInd*sizeof(float));
 
         // Copy from host to device
-        // TODO: Figure out it's syntax
-        cudaMemcpy(&fullCloudX, )
+        cudaMemcpy(&fullCloudX, flat_array_X, fullCloud->points.size()*sizeof(float), cudaMemcpyHostToDevice);
+        cudaMemcpy(&fullCloudY, flat_array_Y, fullCloud->points.size()*sizeof(float), cudaMemcpyHostToDevice);
+        cudaMemcpy(&fullCloudZ, flat_array_Z, fullCloud->points.size()*sizeof(float), cudaMemcpyHostToDevice);
+
+        cudaMemcpy(&groundMatCUDA, flat_array_groundMat, Horizon_SCAN*groundScanInd*sizeof(float), cudaMemcpyHostToDevice);
 
         // Call the groundRemovalCuda function with <<<blocksPerGrid, threadsPerBlock>>>
         int threadsPerBlock = groundScanInd;
         int blocksPerGrid   = (Horizon_SCAN*groundScanInd);
-        groundRemovalCUDA<<<blocksPerGrid, threadsPerBlock>>>(fullCloudX, fullCloudY, fullCloudZ, groundMat);
+        groundRemovalCUDA<<<blocksPerGrid, threadsPerBlock>>>(fullCloudX, fullCloudY, fullCloudZ, flat_array_groundMat);
 
         // Memcopy back to host cudaMemcpy
-        cudaMemcpy()
+        cudaMemcpy(&groundMatCUDA, flat_array_groundMat, Horizon_SCAN*groundScanInd*sizeof(float), cudaMemcpyDeviceToHost);
+
+        // Save groundMat the memory to pcl clouds.
+        // TODO: ADD OPENMP Parfor to copy arrays to PCL cloud.
+
+        // extract ground cloud (groundMat == 1)
+        // mark entry that doesn't need to label (ground and invalid point) for segmentation
+        // note that ground remove is from 0~N_SCAN-1, need rangeMat for mark label matrix for the 16th scan
         
-        // Save all the memory to pcl clouds.
+        for (size_t i = 0; i < N_SCAN; ++i){
+            for (size_t j = 0; j < Horizon_SCAN; ++j){
+                if (groundMat.at<int8_t>(i,j) == 1 || rangeMat.at<float>(i,j) == FLT_MAX){
+                    labelMat.at<int>(i,j) = -1;
+                }
+            }
+        }
+
+        if (pubGroundCloud.getNumSubscribers() != 0){
+            for (size_t i = 0; i <= groundScanInd; ++i){
+                for (size_t j = 0; j < Horizon_SCAN; ++j){
+                    if (groundMat.at<int8_t>(i,j) == 1)
+                        groundCloud->push_back(fullCloud->points[j + i*Horizon_SCAN]);
+                }
+            }
+        }
 
         // Free cuda memory cudaFree
         cudaFree(fullCloudX);
