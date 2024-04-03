@@ -31,6 +31,7 @@
 //     Robotics: Science and Systems Conference (RSS). Berkeley, CA, July 2014.
 //   T. Shan and B. Englot. LeGO-LOAM: Lightweight and Ground-Optimized Lidar Odometry and Mapping on Variable Terrain
 //      IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS). October 2018.
+// Compiler Explorer Link: https://godbolt.org/z/Cv5ozC
 
 #include "utility.h"
 
@@ -177,7 +178,7 @@ public:
             }  
         }
     }
-    
+
     void cloudHandler(const sensor_msgs::PointCloud2ConstPtr& laserCloudMsg){
 
         // 1. Convert ros message to pcl point cloud
@@ -256,7 +257,7 @@ public:
         }
     }
 
-    __global__ void groundRemoval(float *fullCloudX, float *fullCloudY, float *fullCloudZ, float *groundMat){
+    __global__ void groundRemovalCUDA(float *fullCloudX, float *fullCloudY, float *fullCloudZ, float *groundMat){
         size_t lowerInd, upperInd;
         float diffX, diffY, diffZ, angle;
         // groundMat
@@ -280,7 +281,7 @@ public:
 
         if (abs(angle - sensorMountAngle) <= 10){
             groundMat[threadIdx.x + blockIdx.x * blockDim.x] = 1;
-            groundMat[(threadIdx.x + 1) blockIdx.x * blockDim.x] = 1;
+            groundMat[(threadIdx.x + 1) + blockIdx.x * blockDim.x] = 1;
         }
     }
 
@@ -291,11 +292,13 @@ public:
         float* fullCloudX, fullCloudY, fullCloudZ, groundMatCUDA;
 
         // Assign memory for remote device
-        cudaMalloc(&fullCloudX, fullCloud->points.size()*sizeof(float));
-        cudaMalloc(&fullCloudY, fullCloud->points.size()*sizeof(float));
-        cudaMalloc(&fullCloudZ, fullCloud->points.size()*sizeof(float));
+        cudaMallocManaged(&fullCloudX, fullCloud->points.size()*sizeof(float));
+        cudaMallocManaged(&fullCloudY, fullCloud->points.size()*sizeof(float));
+        cudaMallocManaged(&fullCloudZ, fullCloud->points.size()*sizeof(float));
 
-        cudaMalloc(&groundMatCUDA, Horizon_SCAN*groundScanInd*sizeof(float));
+        cudaMallocManaged(&groundMatCUDA, Horizon_SCAN*groundScanInd*sizeof(float));
+        
+        // See if CUDA memory prefetch needs to be done here.
 
         // Copy from host to device
         cudaMemcpy(&fullCloudX, flat_array_X, fullCloud->points.size()*sizeof(float), cudaMemcpyHostToDevice);
@@ -318,7 +321,7 @@ public:
         // extract ground cloud (groundMat == 1)
         // mark entry that doesn't need to label (ground and invalid point) for segmentation
         // note that ground remove is from 0~N_SCAN-1, need rangeMat for mark label matrix for the 16th scan
-        
+
         for (size_t i = 0; i < N_SCAN; ++i){
             for (size_t j = 0; j < Horizon_SCAN; ++j){
                 if (groundMat.at<int8_t>(i,j) == 1 || rangeMat.at<float>(i,j) == FLT_MAX){
@@ -343,7 +346,6 @@ public:
         cudaFree(groundMat);
     }
 
-    /*TODO: Move this segmentation to CUDA*/
     void groundRemoval(){
         size_t lowerInd, upperInd;
         float diffX, diffY, diffZ, angle;
@@ -396,11 +398,25 @@ public:
         }
     }
 
+    __global__ void cloudSegmentationCUDA(){
+    if (labelMat.at<int>(i,j) == 0)
+        labelComponentsCUDA();
 
-    // __global__ void cloudSegmentationCUDA(){
+    __device__ int sizeOfSegCloud = 0;
 
-    // }
+    startRingIndexCUDA[blockIdx.x * blockDim.x] = sizeOfSegCloud -1 + 5;
 
+
+
+    }
+
+    __device__ void labelComponentsCUDA(){
+
+    }
+
+    void cloudSegmentationCUDAcall(){
+
+    }
 
     /*TODO: Move this segmentation to CUDA*/
     void cloudSegmentation(){
@@ -462,6 +478,7 @@ public:
         }
     }
 
+    // TODO: Use __device__ call to move this code to CUDA device and do the component labelling.
     void labelComponents(int row, int col){
         // use std::queue std::vector std::deque will slow the program down greatly
         float d1, d2, alpha, angle;
