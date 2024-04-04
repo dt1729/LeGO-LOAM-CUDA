@@ -398,16 +398,32 @@ public:
         }
     }
 
-    __global__ void cloudSegmentationCUDA(){
-    if (labelMat.at<int>(i,j) == 0)
-        labelComponentsCUDA();
+    __global__ void cloudSegmentationCUDA(void* labelMat, void* groundMat){
 
-    __device__ int sizeOfSegCloud = 0;
+        if (labelMat->at<int>(blockIdx.x * blockDim.x, threadIdx.x) == 0)
+            labelComponentsCUDA();
 
-    startRingIndexCUDA[blockIdx.x * blockDim.x] = sizeOfSegCloud -1 + 5;
+        __device__ int sizeOfSegCloud = 0;
 
+        startRingIndexCUDA[blockIdx.x * blockDim.x] = sizeOfSegCloud -1 + 5;
 
+        if(labelMat->at<int>(blockIdx.x * blockDim.x, threadIdx.x) > 0 || groundMat->at<int_t>(blockIdx.x * blockDim.x, threadIdx.x) == 1){
+            if(labelMat->at<int>(blockIdx.x * blockDim.x, threadIdx.x) == 999999){
+                if(blockIdx.x * blockDim.x > groundScanInd && threadIdx % 5 == 0){
+                    outlierCloud->push_back(fullCloud->points[blockIdx.x * blockDim.x + threadIdx.x*Horizon_SCAN]);
+                    return;
+                }
+                else{
+                    return;
+                }
+            }
+        }
 
+        // majority of ground points are skipped
+        if (groundMat->at<int8_t>(blockIdx.x * blockDim.x, threadIdx.x) == 1){
+            if (threadIdx.x%5!=0 && threadIdx.x>5 && threadIdx.x<Horizon_SCAN-5)
+                return;
+        }
     }
 
     __device__ void labelComponentsCUDA(){
@@ -416,6 +432,17 @@ public:
 
     void cloudSegmentationCUDAcall(){
 
+
+        // mark ground points so they will not be considered as edge features later
+        segMsg.segmentedCloudGroundFlag[sizeOfSegCloud] = (groundMat.at<int8_t>(i,j) == 1);
+        // mark the points' column index for marking occlusion later
+        segMsg.segmentedCloudColInd[sizeOfSegCloud] = j;
+        // save range info
+        segMsg.segmentedCloudRange[sizeOfSegCloud]  = rangeMat.at<float>(i,j);
+        // save seg cloud
+        segmentedCloud->push_back(fullCloud->points[j + i*Horizon_SCAN]);
+        // size of seg cloud
+        ++sizeOfSegCloud;
     }
 
     /*TODO: Move this segmentation to CUDA*/
