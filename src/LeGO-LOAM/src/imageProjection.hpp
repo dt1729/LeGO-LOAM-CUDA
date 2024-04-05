@@ -398,7 +398,7 @@ public:
         }
     }
 
-    __global__ void cloudSegmentationCUDA(void* labelMat, void* groundMat){
+    __global__ void cloudSegmentationCUDA(void* labelMat, void* groundMat, void* outlierCloud){
 
         if (labelMat->at<int>(blockIdx.x * blockDim.x, threadIdx.x) == 0)
             labelComponentsCUDA();
@@ -427,11 +427,30 @@ public:
     }
 
     __device__ void labelComponentsCUDA(){
-
     }
 
     void cloudSegmentationCUDAcall(){
+        cv::Mat *rangeMat_ptr; // range matrix for range image
+        cv::Mat *labelMat_ptr; // label matrix for segmentaiton marking
+        cv::Mat *groundMat_ptr; // ground matrix for ground cloud marking
 
+        cudaMallocManaged((void**)&rangeMat_ptr, sizeof(rangeMat));
+        cudaMallocManaged((void**)&labelMat_ptr, sizeof(labelMat));
+        cudaMallocManaged((void**)&groundMat_ptr, sizeof(groundMat));
+
+        cudaMemcpy(rangeMat_ptr, &rangeMat, sizeof(cv::Mat), cudaMemcpyHostToDevice);
+        cudaMemcpy(labelMat_ptr, &labelMat, sizeof(cv::Mat), cudaMemcpyHostToDevice);
+        cudaMemcpy(groundMat_ptr, &groundMat, sizeof(cv::Mat), cudaMemcpyHostToDevice);
+
+        cloudSegmentationCUDA<<<Horizon_SCAN*groundScanInd>>>(labelMat_ptr, groundMat_ptr, outlierCloud_ptr);
+
+        cudaMemcpy(&rangeMat, rangeMat_ptr, sizeof(cv::Mat), cudaMemcpyDeviceToHost);
+        cudaMemcpy(&labelMat, labelMat_ptr, sizeof(cv::Mat), cudaMemcpyDeviceToHost);
+        cudaMemcpy(&groundMat, groundMat_ptr, sizeof(cv::Mat), cudaMemcpyDeviceToHost);
+
+        cudaFree(rangeMat_ptr);
+        cudaFree(labelMat_ptr);
+        cudaFree(groundMat_ptr);
 
         // mark ground points so they will not be considered as edge features later
         segMsg.segmentedCloudGroundFlag[sizeOfSegCloud] = (groundMat.at<int8_t>(i,j) == 1);
