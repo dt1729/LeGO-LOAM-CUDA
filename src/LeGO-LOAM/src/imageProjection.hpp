@@ -77,11 +77,11 @@ private:
 
     std::vector<std::pair<int8_t, int8_t> > neighborIterator; // neighbor iterator for segmentaiton process
 
-    uint16_t *allPushedIndX; // array for tracking points of a segmented object
-    uint16_t *allPushedIndY;
+    __device__ __global__ uint16_t *allPushedIndX; // array for tracking points of a segmented object
+    __device__ __global__ uint16_t *allPushedIndY;
 
-    uint16_t *queueIndX; // array for breadth-first search process of segmentation, for speed
-    uint16_t *queueIndY;
+    __device__ __global__ uint16_t *queueIndX; // array for breadth-first search process of segmentation, for speed
+    __device__ __global__ uint16_t *queueIndY;
 
 public:
     ImageProjection():
@@ -426,9 +426,6 @@ public:
         }
     }
 
-    __device__ void labelComponentsCUDA(){
-    }
-
     void cloudSegmentationCUDAcall(){
         cv::Mat *rangeMat_ptr; // range matrix for range image
         cv::Mat *labelMat_ptr; // label matrix for segmentaiton marking
@@ -462,6 +459,104 @@ public:
         segmentedCloud->push_back(fullCloud->points[j + i*Horizon_SCAN]);
         // size of seg cloud
         ++sizeOfSegCloud;
+    }
+
+    // TODO: verify if the code calls value from other kernel while working on this,
+    // because that would enforce sequential execution
+    // TODO: If we can't use class member objects call p1, p2
+    // TODO: Update labelMat object with void pointer as used in cloudSegmentationCUDA
+    __device__ void labelComponentsCUDA(int row, int col, void* labelMat){
+        float d1, d2, alpha, angle;
+        int fromIndX, fromIndY, thisIndX, thisIndY; 
+        bool lineCountFlag[N_SCAN] = {false};
+
+        // Make these variables in global namespace, 
+        // is defining a variable in class directly inherited in the kernel function
+        p1[0] = row;
+        p2[0] = column;
+
+        int queueSize = 1;
+        int queueStartInd = 0;
+        int queueEndInd = 1;
+
+        allPushedIndX[0] = row;
+        allPushedIndY[0] = col;
+        int allPushedIndSize = 1;
+
+        while(queueSize > 0){
+            // Pop point
+            fromIndX = p1[queueStartInd];
+            fromIndY = p2[queueStartInd];
+            --queueSize;
+            ++queueStartInd;
+            // Mark popped point
+            labelMat.at<int>(fromIndX, fromIndY) = labelCount;
+            // Loop through all the neighboring grids of popped grid
+            for (auto iter = neighborIterator.begin(); iter != neighborIterator.end(); ++iter){
+                // new index
+                thisIndX = fromIndX + (*iter).first;
+                thisIndY = fromIndY + (*iter).second;
+                // index should be within the boundary
+                if (thisIndX < 0 || thisIndX >= N_SCAN)
+                    continue;
+                // at range image margin (left or right side)
+                if (thisIndY < 0)
+                    thisIndY = Horizon_SCAN - 1;
+                if (thisIndY >= Horizon_SCAN)
+                    thisIndY = 0;
+                // prevent infinite loop (caused by put already examined point back)
+                if (labelMat.at<int>(thisIndX, thisIndY) != 0)
+                    continue;
+
+                d1 = std::max(rangeMat.at<float>(fromIndX, fromIndY), 
+                              rangeMat.at<float>(thisIndX, thisIndY));
+                d2 = std::min(rangeMat.at<float>(fromIndX, fromIndY), 
+                              rangeMat.at<float>(thisIndX, thisIndY));
+
+                if ((*iter).first == 0)
+                    alpha = segmentAlphaX;
+                else
+                    alpha = segmentAlphaY;
+
+                angle = atan2(d2*sin(alpha), (d1 -d2*cos(alpha)));
+
+                if (angle > segmentTheta){
+
+                    p1[queueEndInd] = thisIndX;
+                    p2[queueEndInd] = thisIndY;
+                    ++queueSize;
+                    ++queueEndInd;
+
+                    labelMat.at<int>(thisIndX, thisIndY) = labelCount;
+                    lineCountFlag[thisIndX] = true;
+
+                    allPushedIndX[allPushedIndSize] = thisIndX;
+                    allPushedIndY[allPushedIndSize] = thisIndY;
+                    ++allPushedIndSize;
+                }
+            }
+        }
+
+        // check if this segment is valid
+        bool feasibleSegment = false;
+        if (allPushedIndSize >= 30)
+            feasibleSegment = true;
+        else if (allPushedIndSize >= segmentValidPointNum){
+            int lineCount = 0;
+            for (size_t i = 0; i < N_SCAN; ++i)
+                if (lineCountFlag[i] == true)
+                    ++lineCount;
+            if (lineCount >= segmentValidLineNum)
+                feasibleSegment = true;            
+        }
+        // segment is valid, mark these points
+        if (feasibleSegment == true){
+            ++labelCount;
+        }else{ // segment is invalid, mark these points
+            for (size_t i = 0; i < allPushedIndSize; ++i){
+                labelMat.at<int>(allPushedIndX[i], allPushedIndY[i]) = 999999;
+            }
+        }
     }
 
     /*TODO: Move this segmentation to CUDA*/
